@@ -1,0 +1,54 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg: #1c1410;
+  --color-surface: #2a211c;
+  --color-elevated: #3a2e26;
+  --color-fg: #f3ede3;
+  --color-muted: #b9a898;
+  --color-subtle: #8a7768;
+  --color-accent: #3f8f5c;
+  --color-accent-fg: #f3ede3;
+  --color-berry: #c43c3c;
+  --color-citrus: #e2c04a;
+  --color-border: color-mix(in oklab, #f3ede3 14%, transparent);
+  --color-border-strong: color-mix(in oklab, #f3ede3 26%, transparent);
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  --font-display: "Fredoka", "Nunito", system-ui, sans-serif;
+  --font-sans: "Nunito", system-ui, sans-serif;
+  --shadow-panel: 0 18px 40px color-mix(in oklab, #000 38%, transparent);
+}
+
+@layer base {
+  html,
+  body,
+  #app {
+    min-height: 100%;
+    background: var(--color-bg);
+    color: var(--color-fg);
+    font-family: var(--font-sans);
+  }
+
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
