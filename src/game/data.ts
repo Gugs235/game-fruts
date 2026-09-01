@@ -22,6 +22,22 @@ export type EnemyKind = "gummy" | "lollipop" | "gelatin" | "chocolate" | "sour" 
 export type WorldId = "fridge" | "pantry" | "freezer" | "factory" | "arena";
 export type Tile = 0 | 1 | 2 | 3 | 4 | 5;
 
+// Coletáveis do modo "collect" (inspirado nas frutas do Bad Ice-Cream).
+// Não são o mesmo que as frutas jogáveis: são itens espalhados pelo mapa.
+export type ItemKind = "banana" | "cherry" | "blueberry" | "kiwi";
+
+export const ITEM_INFO: Record<ItemKind, { name: string; color: string; accent: string }> = {
+  banana: { name: "Banana", color: "#f0d94e", accent: "#c9a72c" },
+  cherry: { name: "Cereja", color: "#d6304a", accent: "#7a2030" },
+  blueberry: { name: "Mirtilo", color: "#4a5fd6", accent: "#2c3a8f" },
+  kiwi: { name: "Kiwi", color: "#8fc23a", accent: "#4f6b1e" },
+};
+
+// Uma "onda" de coleta: N itens de um tipo aparecem; quando todos são
+// coletados, a próxima onda entra (como banana -> uva no Bad Ice-Cream).
+export type LevelWave = { item: ItemKind; count: number; moving?: boolean };
+export type LevelObjective = { waves: LevelWave[] };
+
 export const FRUITS: Record<
   FruitId,
   {
@@ -89,10 +105,25 @@ export const ENEMY_INFO: Record<
 > = {
   gummy: { name: "Bala de Goma", hp: 1, speed: 2.8, blurb: "Persegue em linha, lenta e teimosa." },
   lollipop: { name: "Pirulito", hp: 2, speed: 2.4, blurb: "Quebra as caixas que você constrói." },
-  gelatin: { name: "Gelatina", hp: 2, speed: 4.6, blurb: "Copia o seu último movimento com atraso." },
-  chocolate: { name: "Chocolate", hp: 2, speed: 1.55, blurb: "Deixa poças que atrasam seus passos." },
+  gelatin: {
+    name: "Gelatina",
+    hp: 2,
+    speed: 4.6,
+    blurb: "Copia o seu último movimento com atraso.",
+  },
+  chocolate: {
+    name: "Chocolate",
+    hp: 2,
+    speed: 1.55,
+    blurb: "Deixa poças que atrasam seus passos.",
+  },
   sour: { name: "Bala Ácida", hp: 2, speed: 1.85, blurb: "Atira cristais de açúcar à distância." },
-  boss: { name: "Rei do Açúcar", hp: 12, speed: 2.35, blurb: "Persegue, quebra muros e dispara refrigerante." },
+  boss: {
+    name: "Rei do Açúcar",
+    hp: 12,
+    speed: 2.35,
+    blurb: "Persegue, quebra muros e dispara refrigerante.",
+  },
 };
 
 export const WORLDS: Record<
@@ -160,6 +191,10 @@ export type LevelDef = {
   world: WorldId;
   intro: string;
   map: string[];
+  // Se ausente: vitória ao eliminar todos os inimigos (comportamento atual).
+  // Se presente: vitória ao completar todas as ondas de coleta; inimigos
+  // continuam vivos como obstáculo, não precisam ser eliminados.
+  objective?: LevelObjective;
 };
 
 export const LEVELS: LevelDef[] = [
@@ -167,7 +202,7 @@ export const LEVELS: LevelDef[] = [
     id: "1-1",
     name: "Prateleira Fria",
     world: "fridge",
-    intro: "Ande na grade, empilhe caixas e prenda as balas de goma.",
+    intro: "Colete as bananas espalhadas pela prateleira sem deixar a bala de goma te tocar.",
     map: [
       "###############",
       "#P............#",
@@ -181,12 +216,13 @@ export const LEVELS: LevelDef[] = [
       "#............o#",
       "###############",
     ],
+    objective: { waves: [{ item: "banana", count: 3 }] },
   },
   {
     id: "1-2",
     name: "Corredor do Iogurte",
     world: "fridge",
-    intro: "Corredores estreitos: bloqueie as saídas antes que elas te alcancem.",
+    intro: "Corredores estreitos: colete as bananas e bloqueie as gomas com espinhos.",
     map: [
       "###############",
       "#P....#......o#",
@@ -200,12 +236,13 @@ export const LEVELS: LevelDef[] = [
       "#............G#",
       "###############",
     ],
+    objective: { waves: [{ item: "banana", count: 4 }] },
   },
   {
     id: "1-3",
     name: "Gaveta Lotada",
     world: "fridge",
-    intro: "Três gomas. Use o poder da fruta para limpar o grupo.",
+    intro: "Colete as bananas primeiro. Depois as cerejas vão fugir de você!",
     map: [
       "###############",
       "#o.#P....#...o#",
@@ -219,12 +256,18 @@ export const LEVELS: LevelDef[] = [
       "#o.#.....#...o#",
       "###############",
     ],
+    objective: {
+      waves: [
+        { item: "banana", count: 3 },
+        { item: "cherry", count: 3, moving: true },
+      ],
+    },
   },
   {
     id: "2-1",
     name: "Caixas na Despensa",
     world: "pantry",
-    intro: "Pirulitos quebram caixas. Não confie em um muro para sempre.",
+    intro: "Pirulitos quebram caixas. Colete as cerejas fujonas sem se deixar cercar.",
     map: [
       "###############",
       "#P........X...#",
@@ -238,12 +281,13 @@ export const LEVELS: LevelDef[] = [
       "#o........L...#",
       "###############",
     ],
+    objective: { waves: [{ item: "cherry", count: 4, moving: true }] },
   },
   {
     id: "2-2",
     name: "Mistura Doce",
     world: "pantry",
-    intro: "Gomas e pirulitos juntos. Prenda um, fuja do outro.",
+    intro: "Gomas e pirulitos juntos. Colete os mirtilos, depois as cerejas em fuga.",
     map: [
       "###############",
       "#P..#.....#..o#",
@@ -257,12 +301,18 @@ export const LEVELS: LevelDef[] = [
       "#o..#.....#..G#",
       "###############",
     ],
+    objective: {
+      waves: [
+        { item: "blueberry", count: 4 },
+        { item: "cherry", count: 3, moving: true },
+      ],
+    },
   },
   {
     id: "2-3",
     name: "Labirinto de Farinha",
     world: "pantry",
-    intro: "Aperte os pirulitos nos cantos antes que destruam tudo.",
+    intro: "Colete as bananas nos corredores, depois os mirtilos fugidios pelos cantos.",
     map: [
       "###############",
       "#P.#....#....o#",
@@ -276,12 +326,18 @@ export const LEVELS: LevelDef[] = [
       "#o...#....#..G#",
       "###############",
     ],
+    objective: {
+      waves: [
+        { item: "banana", count: 3 },
+        { item: "blueberry", count: 4, moving: true },
+      ],
+    },
   },
   {
     id: "3-1",
     name: "Eco Gelado",
     world: "freezer",
-    intro: "A gelatina copia o seu movimento. Dê um passo, depois mude o plano.",
+    intro: "A gelatina copia o seu movimento. Colete os kiwis, depois as cerejas fujonas.",
     map: [
       "###############",
       "#P............#",
@@ -295,12 +351,18 @@ export const LEVELS: LevelDef[] = [
       "#o............#",
       "###############",
     ],
+    objective: {
+      waves: [
+        { item: "kiwi", count: 3 },
+        { item: "cherry", count: 3, moving: true },
+      ],
+    },
   },
   {
     id: "3-2",
     name: "Geada Dupla",
     world: "freezer",
-    intro: "Gelatina e gomas. O eco chega atrasado — use isso.",
+    intro: "Gelatina e gomas. Os mirtilos e kiwis fogem — o eco chega atrasado, use isso.",
     map: [
       "###############",
       "#P..#.....#..o#",
@@ -314,12 +376,18 @@ export const LEVELS: LevelDef[] = [
       "#o..#.....#...#",
       "###############",
     ],
+    objective: {
+      waves: [
+        { item: "blueberry", count: 4, moving: true },
+        { item: "kiwi", count: 3, moving: true },
+      ],
+    },
   },
   {
     id: "3-3",
     name: "Câmara Fria",
     world: "freezer",
-    intro: "Duas gelatinas. Não deixe os ecos te encurralarem.",
+    intro: "Duas gelatinas. Colete bananas, depois cerejas e kiwis fugindo dos ecos.",
     map: [
       "###############",
       "#P...........o#",
@@ -333,12 +401,19 @@ export const LEVELS: LevelDef[] = [
       "#o............#",
       "###############",
     ],
+    objective: {
+      waves: [
+        { item: "banana", count: 3 },
+        { item: "cherry", count: 3, moving: true },
+        { item: "kiwi", count: 3, moving: true },
+      ],
+    },
   },
   {
     id: "4-1",
     name: "Chão Derretido",
     world: "factory",
-    intro: "Chocolate deixa poças. Evite o rastro ou fique lento.",
+    intro: "Chocolate deixa poças. Colete os kiwis e mirtilos fugidios sem pisar no rastro.",
     map: [
       "###############",
       "#P............#",
@@ -352,12 +427,18 @@ export const LEVELS: LevelDef[] = [
       "#o............#",
       "###############",
     ],
+    objective: {
+      waves: [
+        { item: "kiwi", count: 4, moving: true },
+        { item: "blueberry", count: 4, moving: true },
+      ],
+    },
   },
   {
     id: "4-2",
     name: "Linha de Disparo",
     world: "factory",
-    intro: "Balas ácidas atiram de longe. Use caixas como cobertura.",
+    intro: "Balas ácidas atiram de longe. Colete tudo usando caixas como cobertura.",
     map: [
       "###############",
       "#P....X......S#",
@@ -371,12 +452,19 @@ export const LEVELS: LevelDef[] = [
       "#o....X......S#",
       "###############",
     ],
+    objective: {
+      waves: [
+        { item: "banana", count: 3 },
+        { item: "cherry", count: 4, moving: true },
+        { item: "kiwi", count: 3, moving: true },
+      ],
+    },
   },
   {
     id: "4-3",
     name: "Esteira Final",
     world: "factory",
-    intro: "Chocolate, ácido e goma. Combine bloqueio e poder.",
+    intro: "Chocolate, ácido e goma. Combine bloqueio e poder pra coletar tudo em movimento.",
     map: [
       "###############",
       "#P.#....C....o#",
@@ -390,6 +478,13 @@ export const LEVELS: LevelDef[] = [
       "#o...C......#.#",
       "###############",
     ],
+    objective: {
+      waves: [
+        { item: "blueberry", count: 4, moving: true },
+        { item: "kiwi", count: 4, moving: true },
+        { item: "cherry", count: 4, moving: true },
+      ],
+    },
   },
   {
     id: "5-1",

@@ -18,7 +18,7 @@ import { loadSave, writeSave, type SaveData } from "@/game/save";
 import type { HudSnap } from "@/game/sim";
 import { TouchPad } from "./TouchPad";
 
-type Screen = "title" | "mode" | "howto" | "chars" | "play" | "complete";
+type Screen = "title" | "mode" | "howto" | "levels" | "chars" | "play" | "complete";
 
 const SPRITE: Record<FruitId, string> = {
   lemon: "/sprites/lemon.png",
@@ -97,7 +97,10 @@ export function FruitRebellion() {
 
   return (
     <div className="relative min-h-dvh overflow-hidden bg-bg text-fg">
-      <div className="pointer-events-none absolute inset-0 opacity-40" style={{ backgroundImage: kitchenBg }} />
+      <div
+        className="pointer-events-none absolute inset-0 opacity-40"
+        style={{ backgroundImage: kitchenBg }}
+      />
       {screen === "title" && (
         <Title
           highScore={save.highScore}
@@ -120,14 +123,21 @@ export function FruitRebellion() {
             if (!save.seenHowTo) {
               persist({ ...save, seenHowTo: true });
               setScreen("howto");
-            } else goChars(Math.min(save.unlocked, LEVELS.length - 1));
+            } else setScreen("levels");
           }}
         />
       )}
       {screen === "howto" && (
         <HowTo
           onBack={() => setScreen(players ? "mode" : "title")}
-          onContinue={() => goChars(Math.min(save.unlocked, LEVELS.length - 1))}
+          onContinue={() => setScreen("levels")}
+        />
+      )}
+      {screen === "levels" && (
+        <LevelSelect
+          unlocked={save.unlocked}
+          onBack={() => setScreen("mode")}
+          onPick={(i) => goChars(i)}
         />
       )}
       {screen === "chars" && (
@@ -141,7 +151,7 @@ export function FruitRebellion() {
             if (picking === 0) setP1(id);
             else setP2(id);
           }}
-          onBack={() => setScreen("mode")}
+          onBack={() => setScreen("levels")}
           onConfirm={() => {
             if (players === 2 && picking === 0) setPicking(1);
             else startPlay();
@@ -193,7 +203,13 @@ export function FruitRebellion() {
         />
       )}
       {screen === "complete" && (
-        <Complete score={carryScore} onMenu={() => { setCarryScore(0); setScreen("title"); }} />
+        <Complete
+          score={carryScore}
+          onMenu={() => {
+            setCarryScore(0);
+            setScreen("title");
+          }}
+        />
       )}
     </div>
   );
@@ -266,12 +282,15 @@ function Title({
         ))}
       </div>
       <div className="text-center">
-        <p className="mb-2 text-sm font-semibold uppercase tracking-[0.22em] text-muted">Campanha cooperativa</p>
+        <p className="mb-2 text-sm font-semibold uppercase tracking-[0.22em] text-muted">
+          Campanha cooperativa
+        </p>
         <h1 className="font-display text-5xl font-semibold leading-none tracking-[-0.04em] text-fg sm:text-6xl">
           Fruit Rebellion
         </h1>
         <p className="mx-auto mt-4 max-w-md text-base leading-relaxed text-muted">
-          O Rei do Açúcar corrompeu a despensa. Escolha uma fruta, bloqueie caminhos e liberte o reino da comida.
+          O Rei do Açúcar corrompeu a despensa. Escolha uma fruta, bloqueie caminhos e liberte o
+          reino da comida.
         </p>
       </div>
       <div className="flex w-full max-w-sm flex-col gap-3">
@@ -294,7 +313,11 @@ function Title({
 function ModeSelect({ onPick, onBack }: { onPick: (n: 1 | 2) => void; onBack: () => void }) {
   return (
     <main className="relative z-10 mx-auto flex min-h-dvh max-w-2xl flex-col justify-center gap-6 px-5 py-10">
-      <button type="button" onClick={onBack} className="inline-flex items-center gap-1 text-sm text-muted">
+      <button
+        type="button"
+        onClick={onBack}
+        className="inline-flex items-center gap-1 text-sm text-muted"
+      >
         <ChevronLeft className="size-4" /> Voltar
       </button>
       <h2 className="font-display text-3xl tracking-tight">Modo</h2>
@@ -329,29 +352,85 @@ function ModeSelect({ onPick, onBack }: { onPick: (n: 1 | 2) => void; onBack: ()
 function HowTo({ onContinue, onBack }: { onContinue: () => void; onBack: () => void }) {
   return (
     <main className="relative z-10 mx-auto flex min-h-dvh max-w-xl flex-col justify-center gap-6 px-5 py-10">
-      <button type="button" onClick={onBack} className="inline-flex items-center gap-1 text-sm text-muted">
+      <button
+        type="button"
+        onClick={onBack}
+        className="inline-flex items-center gap-1 text-sm text-muted"
+      >
         <ChevronLeft className="size-4" /> Voltar
       </button>
       <h2 className="font-display text-3xl tracking-tight">Como jogar</h2>
       <Panel className="space-y-4 text-sm leading-relaxed text-muted">
         <p>
-          Movimento em grade, no estilo labirinto. O objetivo de cada fase é eliminar todos os doces — prendendo-os com
-          caixas, usando o poder da fruta ou desviando até eles se encurralarem.
+          Movimento em grade, no estilo labirinto. O objetivo de cada fase é coletar todos os itens
+          espalhados pelo mapa sem deixar os doces te tocarem — use caixas de espinho e o poder da
+          fruta pra abrir caminho e se proteger.
         </p>
         <ul className="space-y-2">
           <li>
             <span className="font-semibold text-fg">P1</span> — WASD mover · Espaço poder · E caixa
           </li>
           <li>
-            <span className="font-semibold text-fg">P2</span> — Setas mover · Enter poder · Shift direito caixa
+            <span className="font-semibold text-fg">P2</span> — Setas mover · Enter poder · Shift
+            direito caixa
           </li>
           <li>Toque: cruz direcional + Poder + Caixa. Controle também aceito.</li>
         </ul>
         <p>
-          Três vidas por fase. Contato com um doce ou projétil custa uma vida. Inimigos presos por caixas são esmagados.
+          Um toque de um doce elimina a fruta na hora. No modo 2 jogadores, se só uma fruta cair o
+          outro jogador continua sozinho — a fase só reinicia se as duas caírem.
         </p>
       </Panel>
-      <Btn onClick={onContinue}>Escolher fruta</Btn>
+      <Btn onClick={onContinue}>Escolher fase</Btn>
+    </main>
+  );
+}
+
+function LevelSelect({
+  unlocked,
+  onPick,
+  onBack,
+}: {
+  unlocked: number;
+  onPick: (index: number) => void;
+  onBack: () => void;
+}) {
+  return (
+    <main className="relative z-10 mx-auto flex min-h-dvh max-w-3xl flex-col justify-center gap-6 px-5 py-10">
+      <button
+        type="button"
+        onClick={onBack}
+        className="inline-flex items-center gap-1 text-sm text-muted"
+      >
+        <ChevronLeft className="size-4" /> Voltar
+      </button>
+      <div>
+        <h2 className="font-display text-3xl tracking-tight">Escolha a fase</h2>
+        <p className="mt-1 text-sm text-muted">Fases já jogadas ou liberadas aparecem claras.</p>
+      </div>
+      <div className="grid grid-cols-4 gap-2.5 sm:grid-cols-6">
+        {LEVELS.map((level, i) => {
+          const available = i <= unlocked;
+          return (
+            <button
+              key={level.id}
+              type="button"
+              disabled={!available}
+              onClick={() => available && onPick(i)}
+              className={`flex aspect-square flex-col items-center justify-center gap-0.5 rounded-lg border font-display text-lg transition-colors ${
+                available
+                  ? "border-border-strong bg-elevated text-fg hover:border-accent"
+                  : "cursor-not-allowed border-border bg-surface/60 text-subtle"
+              }`}
+            >
+              <span>{level.id}</span>
+              <span className="text-[9px] font-sans font-semibold uppercase tracking-wide">
+                {WORLDS[level.world].name}
+              </span>
+            </button>
+          );
+        })}
+      </div>
     </main>
   );
 }
@@ -379,7 +458,11 @@ function CharSelect({
   const def = FRUITS[selected];
   return (
     <main className="relative z-10 mx-auto flex min-h-dvh max-w-3xl flex-col justify-center gap-6 px-5 py-8">
-      <button type="button" onClick={onBack} className="inline-flex items-center gap-1 text-sm text-muted">
+      <button
+        type="button"
+        onClick={onBack}
+        className="inline-flex items-center gap-1 text-sm text-muted"
+      >
         <ChevronLeft className="size-4" /> Voltar
       </button>
       <div>
@@ -389,7 +472,9 @@ function CharSelect({
         <h2 className="font-display text-3xl tracking-tight">
           {players === 2 ? `Jogador ${picking + 1}, escolha` : "Escolha sua fruta"}
         </h2>
-        <p className="mt-1 text-sm text-muted">{level.name} — {level.intro}</p>
+        <p className="mt-1 text-sm text-muted">
+          {level.name} — {level.intro}
+        </p>
       </div>
       <div className="grid grid-cols-5 gap-2 sm:gap-3">
         {FRUIT_ORDER.map((id) => {
@@ -403,7 +488,11 @@ function CharSelect({
                 active ? "border-accent" : "border-border hover:border-border-strong"
               }`}
             >
-              <img src={SPRITE[id]} alt={FRUITS[id].name} className="h-12 w-12 object-contain sm:h-16 sm:w-16" />
+              <img
+                src={SPRITE[id]}
+                alt={FRUITS[id].name}
+                className="h-12 w-12 object-contain sm:h-16 sm:w-16"
+              />
               <span className="mt-1 text-xs font-semibold">{FRUITS[id].name}</span>
             </button>
           );
@@ -491,7 +580,8 @@ function PlayView({
     engineRef.current?.setPaused(paused || !!over);
   }, [paused, over]);
 
-  const lives = hud?.lives ?? 3;
+  const p1Alive = hud?.p1Alive ?? true;
+  const p2Alive = hud?.p2Alive ?? (players === 2 ? true : null);
   const level = LEVELS[levelIndex]!;
 
   return (
@@ -503,17 +593,42 @@ function PlayView({
           </p>
           <p className="truncate font-display text-lg leading-tight">{level.name}</p>
         </div>
-        <div className="flex items-center gap-1" aria-label="Vidas">
-          {Array.from({ length: 3 }).map((_, i) => (
+        <div className="flex items-center gap-2.5">
+          <div
+            className="flex items-center gap-1"
+            aria-label={p1Alive ? "Jogador 1 vivo" : "Jogador 1 eliminado"}
+          >
+            {players === 2 && <span className="text-[10px] font-bold text-muted">P1</span>}
             <Heart
-              key={i}
-              className={`size-5 ${i < lives ? "fill-berry text-berry" : "text-subtle"}`}
+              className={`size-5 ${p1Alive ? "fill-berry text-berry" : "text-subtle"}`}
               strokeWidth={2}
             />
-          ))}
+          </div>
+          {players === 2 && (
+            <div
+              className="flex items-center gap-1"
+              aria-label={p2Alive ? "Jogador 2 vivo" : "Jogador 2 eliminado"}
+            >
+              <span className="text-[10px] font-bold text-muted">P2</span>
+              <Heart
+                className={`size-5 ${p2Alive ? "fill-accent text-accent" : "text-subtle"}`}
+                strokeWidth={2}
+              />
+            </div>
+          )}
         </div>
         <p className="w-16 text-right font-display text-lg tabular-nums">{hud?.score ?? score}</p>
-        <p className="hidden text-sm text-muted sm:block">{hud?.enemies ?? 0} doces</p>
+        {hud?.objective ? (
+          <p
+            className="hidden items-center gap-1.5 text-sm font-semibold sm:flex"
+            style={{ color: hud.objective.itemColor }}
+          >
+            {hud.objective.itemName} {hud.objective.collected}/{hud.objective.target}
+            {hud.objective.wavesLeft > 0 ? ` (+${hud.objective.wavesLeft})` : ""}
+          </p>
+        ) : (
+          <p className="hidden text-sm text-muted sm:block">{hud?.enemies ?? 0} doces</p>
+        )}
         <p className="hidden text-xs text-subtle lg:block">WASD · Espaço · E</p>
         <button
           type="button"
@@ -584,7 +699,11 @@ function PlayView({
             </p>
             <p className="mt-3 font-display text-2xl tabular-nums">{hud?.score ?? score}</p>
             <div className="mt-5 flex flex-col gap-2">
-              {over === "win" && <Btn onClick={onNext}>{levelIndex + 1 >= LEVELS.length ? "Final" : "Próxima fase"}</Btn>}
+              {over === "win" && (
+                <Btn onClick={onNext}>
+                  {levelIndex + 1 >= LEVELS.length ? "Final" : "Próxima fase"}
+                </Btn>
+              )}
               {over === "lose" && (
                 <Btn onClick={onRetry}>
                   <RotateCcw className="size-4" /> Tentar de novo
@@ -622,4 +741,3 @@ function Complete({ score, onMenu }: { score: number; onMenu: () => void }) {
     </main>
   );
 }
-

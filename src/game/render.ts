@@ -1,4 +1,4 @@
-import { COLS, ROWS, WORLDS, type FruitId, type WorldId } from "./data";
+import { COLS, ROWS, ITEM_INFO, WORLDS, type FruitId, type ItemKind, type WorldId } from "./data";
 import type { Entity, Particle, Sim } from "./sim";
 
 export type SpriteMap = Record<string, HTMLImageElement>;
@@ -108,7 +108,14 @@ function drawSpike(ctx: CanvasRenderingContext2D, x: number, y: number, t: numbe
   ctx.restore();
 }
 
-function drawBoss(ctx: CanvasRenderingContext2D, x: number, y: number, t: number, e: Entity, time: number) {
+function drawBoss(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  t: number,
+  e: Entity,
+  time: number,
+) {
   const s = t * (1.15 + Math.sin(time * 3) * 0.03);
   ctx.save();
   ctx.translate(x + t / 2, y + t / 2);
@@ -148,7 +155,13 @@ function drawBoss(ctx: CanvasRenderingContext2D, x: number, y: number, t: number
   ctx.restore();
 }
 
-function drawProjectile(ctx: CanvasRenderingContext2D, x: number, y: number, t: number, time: number) {
+function drawProjectile(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  t: number,
+  time: number,
+) {
   ctx.save();
   ctx.translate(x + t / 2, y + t / 2);
   ctx.rotate(time * 8);
@@ -160,6 +173,90 @@ function drawProjectile(ctx: CanvasRenderingContext2D, x: number, y: number, t: 
   ctx.lineTo(-t * 0.16, 0);
   ctx.closePath();
   ctx.fill();
+  ctx.restore();
+}
+
+function drawItem(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  t: number,
+  kind: ItemKind,
+  time: number,
+  seed: number,
+) {
+  const info = ITEM_INFO[kind];
+  const bob = Math.sin(time * 4 + seed) * 2.5;
+  ctx.save();
+  ctx.translate(x + t / 2, y + t / 2 + bob);
+  ctx.fillStyle = "rgba(0,0,0,0.16)";
+  ctx.beginPath();
+  ctx.ellipse(0, t * 0.34 - bob, t * 0.2, t * 0.07, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  if (kind === "banana") {
+    ctx.rotate(-0.5);
+    ctx.fillStyle = info.color;
+    ctx.beginPath();
+    ctx.moveTo(-t * 0.22, t * 0.14);
+    ctx.quadraticCurveTo(0, -t * 0.32, t * 0.24, -t * 0.12);
+    ctx.quadraticCurveTo(0, -t * 0.14, -t * 0.1, t * 0.2);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = info.accent;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+  } else if (kind === "cherry") {
+    ctx.strokeStyle = "#3f8f5c";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(-t * 0.08, -t * 0.05);
+    ctx.lineTo(0, -t * 0.26);
+    ctx.lineTo(t * 0.1, -t * 0.05);
+    ctx.stroke();
+    for (const dx of [-t * 0.1, t * 0.1]) {
+      ctx.fillStyle = info.color;
+      ctx.beginPath();
+      ctx.arc(dx, t * 0.08, t * 0.15, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "rgba(255,255,255,0.35)";
+      ctx.beginPath();
+      ctx.arc(dx - t * 0.04, t * 0.02, t * 0.04, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  } else if (kind === "blueberry") {
+    const spots = [
+      [0, -t * 0.1],
+      [-t * 0.13, t * 0.08],
+      [t * 0.13, t * 0.08],
+    ];
+    for (const [dx, dy] of spots) {
+      ctx.fillStyle = info.color;
+      ctx.beginPath();
+      ctx.arc(dx!, dy!, t * 0.15, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = info.accent;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+  } else {
+    // kiwi
+    ctx.fillStyle = info.color;
+    ctx.beginPath();
+    ctx.arc(0, 0, t * 0.26, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#f3ede3";
+    ctx.beginPath();
+    ctx.arc(0, 0, t * 0.16, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = info.accent;
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      ctx.beginPath();
+      ctx.arc(Math.cos(a) * t * 0.1, Math.sin(a) * t * 0.1, t * 0.02, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
   ctx.restore();
 }
 
@@ -274,6 +371,10 @@ export function renderSim(
       drawProjectile(ctx, px, py, tile, time);
       continue;
     }
+    if (e.kind === "item" && e.item) {
+      drawItem(ctx, px, py, tile, e.item, time, e.id);
+      continue;
+    }
     if (e.kind === "boss") {
       if (e.flash > 0) ctx.globalAlpha = 0.55 + Math.sin(time * 40) * 0.3;
       drawBoss(ctx, px, py, tile, e, time);
@@ -290,7 +391,8 @@ export function renderSim(
     ctx.save();
     ctx.translate(px + tile / 2, py + tile * 0.62 + bob);
     ctx.scale((e.dir === 3 ? -1 : 1) * (1 / squash), stretch);
-    if (e.kind === "player" && e.invuln > 0 && Math.floor(time * 16) % 2 === 0) ctx.globalAlpha = 0.45;
+    if (e.kind === "player" && e.invuln > 0 && Math.floor(time * 16) % 2 === 0)
+      ctx.globalAlpha = 0.45;
     if (e.flash > 0) ctx.globalAlpha = 0.7;
     if (img) {
       ctx.drawImage(img, -size / 2, -size + 6, size, size);

@@ -5,12 +5,14 @@ import {
   DY,
   ENEMY_INFO,
   FRUITS,
+  ITEM_INFO,
   LEVELS,
-  START_LIVES,
   type Dir,
   type EnemyKind,
   type FruitId,
+  type ItemKind,
   type LevelDef,
+  type LevelObjective,
   type Tile,
   type WorldId,
 } from "./data";
@@ -30,9 +32,11 @@ export type Particle = {
 
 export type Entity = {
   id: number;
-  kind: "player" | EnemyKind | "projectile";
+  kind: "player" | EnemyKind | "projectile" | "item";
   playerIndex?: 0 | 1;
   fruit?: FruitId;
+  item?: ItemKind;
+  wander: number;
   gx: number;
   gy: number;
   x: number;
@@ -65,7 +69,8 @@ export type Entity = {
 };
 
 export type HudSnap = {
-  lives: number;
+  p1Alive: boolean;
+  p2Alive: boolean | null;
   score: number;
   enemies: number;
   levelName: string;
@@ -79,10 +84,19 @@ export type HudSnap = {
   status: "play" | "win" | "lose";
   players: number;
   paused: boolean;
+  objective: {
+    itemName: string;
+    itemColor: string;
+    collected: number;
+    target: number;
+    wavesLeft: number;
+  } | null;
 };
 
 export type SimHooks = {
-  onSfx: (name: "move" | "crate" | "power" | "hit" | "kill" | "hurt" | "win" | "lose" | "pickup") => void;
+  onSfx: (
+    name: "move" | "crate" | "power" | "hit" | "kill" | "hurt" | "win" | "lose" | "pickup",
+  ) => void;
 };
 
 let nextId = 1;
@@ -116,6 +130,7 @@ function makeEntity(partial: Partial<Entity> & Pick<Entity, "kind" | "gx" | "gy"
     phase: 1,
     spawnedMinions: false,
     mimic: [],
+    wander: 0,
     ...partial,
   };
 }
@@ -126,7 +141,6 @@ export class Sim {
   entities: Entity[] = [];
   particles: Particle[] = [];
   level!: LevelDef;
-  lives = START_LIVES;
   score = 0;
   time = 0;
   status: "play" | "win" | "lose" = "play";
@@ -139,6 +153,10 @@ export class Sim {
   paused = false;
   pickups = 0;
   collected = new Set<string>();
+  objective: LevelObjective | null = null;
+  waveIndex = 0;
+  waveTarget = 0;
+  waveCollected = 0;
   private hooks: SimHooks;
 
   constructor(hooks: SimHooks) {
@@ -151,7 +169,6 @@ export class Sim {
     this.level = level;
     this.fruits = fruits;
     this.players = players;
-    this.lives = START_LIVES;
     this.score = score;
     this.time = 0;
     this.status = "play";
@@ -161,6 +178,10 @@ export class Sim {
     this.entities = [];
     this.particles = [];
     this.collected = new Set();
+    this.objective = level.objective ?? null;
+    this.waveIndex = 0;
+    this.waveTarget = 0;
+    this.waveCollected = 0;
     this.tiles = new Array(COLS * ROWS).fill(0);
     this.tileLife = new Array(COLS * ROWS).fill(0);
     this.message = level.intro;
@@ -201,6 +222,8 @@ export class Sim {
       if (s.ch === "B") this.spawnEnemy("boss", s.x, s.y);
       if (s.ch === "o") this.pickups++;
     }
+
+    if (this.objective) this.spawnWave();
   }
 
   private spawnPlayer(index: 0 | 1, fruit: FruitId, x: number, y: number) {
@@ -235,6 +258,53 @@ export class Sim {
     );
   }
 
+  /** Picks a random open, unoccupied floor cell — used to place wave items. */
+  private randomFreeCell(): { x: number; y: number } | null {
+    const candidates: { x: number; y: number }[] = [];
+    for (let y = 0; y < ROWS; y++) {
+      for (let x = 0; x < COLS; x++) {
+        if (this.tileAt(x, y) !== 0) continue;
+        if (this.occupied(x, y)) continue;
+        candidates.push({ x, y });
+      }
+    }
+    if (!candidates.length) return null;
+    return candidates[Math.floor(Math.random() * candidates.length)]!;
+  }
+
+  /** Spawns the current wave's items. Advances waveIndex before calling this. */
+  private spawnWave() {
+    if (!this.objective) return;
+    const wave = this.objective.waves[this.waveIndex];
+    if (!wave) return;
+    this.waveTarget = wave.count;
+    this.waveCollected = 0;
+    const info = ITEM_INFO[wave.item];
+    this.message = `Colete: ${info.name} (0/${wave.count})`;
+    this.messageT = 2.6;
+    for (let i = 0; i < wave.count; i++) {
+      const cell = this.randomFreeCell();
+      if (!cell) break;
+      this.entities.push(
+        makeEntity({
+          kind: "item",
+          item: wave.item,
+          gx: cell.x,
+          gy: cell.y,
+          speed: wave.moving ? 2.0 : 0,
+          dir: Math.floor(Math.random() * 4) as Dir,
+        }),
+      );
+    }
+  }
+
+  private winLevel() {
+    if (this.status !== "play") return;
+    this.status = "win";
+    this.score += 250 + Math.max(0, 80 - Math.floor(this.time)) * 5;
+    this.hooks.onSfx("win");
+  }
+
   idx(x: number, y: number) {
     return y * COLS + x;
   }
@@ -263,7 +333,7 @@ export class Sim {
 
   occupied(x: number, y: number, self?: Entity, ignorePlayers = false): boolean {
     for (const e of this.entities) {
-      if (!e.alive || e === self || e.kind === "projectile") continue;
+      if (!e.alive || e === self || e.kind === "projectile" || e.kind === "item") continue;
       if (ignorePlayers && e.kind === "player") continue;
       if (self?.kind === "player" && e.kind === "player") continue;
       if (e.gx === x && e.gy === y) return true;
@@ -366,7 +436,7 @@ export class Sim {
           this.hooks.onSfx("pickup");
         }
       }
-    } else if (e.kind !== "projectile") {
+    } else if (e.kind !== "projectile" && e.kind !== "item") {
       if (tile === 3) this.damage(e, 1);
       if (tile === 4) {
         e.stun = Math.max(e.stun, 0.7);
@@ -382,7 +452,7 @@ export class Sim {
 
   private hitAt(x: number, y: number, dmg: number, _src?: Entity) {
     for (const e of this.entities) {
-      if (!e.alive || e.kind === "player" || e.kind === "projectile") continue;
+      if (!e.alive || e.kind === "player" || e.kind === "projectile" || e.kind === "item") continue;
       if ((e.gx === x && e.gy === y) || (e.moving && e.toX === x && e.toY === y)) {
         this.damage(e, dmg);
       }
@@ -398,11 +468,11 @@ export class Sim {
     this.hitstop = Math.max(this.hitstop, 0.05);
     this.trauma = Math.min(1, this.trauma + 0.28);
     if (e.kind === "player") {
-      e.invuln = 1.4;
-      this.lives -= 1;
       this.hooks.onSfx("hurt");
-      this.burst(e.gx, e.gy, "#c43c3c", 14, "spark");
-      if (this.lives <= 0) {
+      this.burst(e.gx, e.gy, "#c43c3c", 18, "spark");
+      e.alive = false; // one touch = out, instantly — no multi-hit life pool
+      const anyoneLeft = this.entities.some((x) => x.kind === "player" && x.alive);
+      if (!anyoneLeft) {
         this.status = "lose";
         this.hooks.onSfx("lose");
       }
@@ -433,8 +503,14 @@ export class Sim {
       const cells = [
         [p.gx + DX[p.dir], p.gy + DY[p.dir]],
         [p.gx + 2 * DX[p.dir], p.gy + 2 * DY[p.dir]],
-        [p.gx + DX[p.dir] + DX[((p.dir + 1) % 4) as Dir], p.gy + DY[p.dir] + DY[((p.dir + 1) % 4) as Dir]],
-        [p.gx + DX[p.dir] + DX[((p.dir + 3) % 4) as Dir], p.gy + DY[p.dir] + DY[((p.dir + 3) % 4) as Dir]],
+        [
+          p.gx + DX[p.dir] + DX[((p.dir + 1) % 4) as Dir],
+          p.gy + DY[p.dir] + DY[((p.dir + 1) % 4) as Dir],
+        ],
+        [
+          p.gx + DX[p.dir] + DX[((p.dir + 3) % 4) as Dir],
+          p.gy + DY[p.dir] + DY[((p.dir + 3) % 4) as Dir],
+        ],
       ];
       for (const [x, y] of cells) {
         if (!this.inBounds(x, y) || this.tileAt(x, y) === 1) continue;
@@ -459,7 +535,8 @@ export class Sim {
       const landY = p.gy + DY[p.dir] * 2;
       if (this.walkable(landX, landY) && !this.occupied(landX, landY, p)) {
         if (this.tileAt(p.gx, p.gy) === 0) this.setTile(p.gx, p.gy, 4, 3.2);
-        if (this.walkable(midX, midY) && this.tileAt(midX, midY) === 0) this.setTile(midX, midY, 4, 3.2);
+        if (this.walkable(midX, midY) && this.tileAt(midX, midY) === 0)
+          this.setTile(midX, midY, 4, 3.2);
         p.gx = landX;
         p.gy = landY;
         p.x = landX;
@@ -616,6 +693,25 @@ export class Sim {
     else e.trapped = 0;
   }
 
+  /** Items with speed 0 sit still; items with speed > 0 wander, leaning away
+   * from the nearest player about half the time so they feel like they're
+   * fleeing rather than patrolling. */
+  private thinkItem(e: Entity) {
+    if (e.speed <= 0 || e.moving || e.wander > 0) return;
+    e.wander = 0.32 + Math.random() * 0.45;
+    const dirs: Dir[] = [0, 1, 2, 3];
+    dirs.sort(() => Math.random() - 0.5);
+    const target = this.nearestPlayer(e);
+    if (target && Math.random() < 0.6) {
+      dirs.sort((a, b) => {
+        const da = Math.abs(e.gx + DX[a] - target.gx) + Math.abs(e.gy + DY[a] - target.gy);
+        const db = Math.abs(e.gx + DX[b] - target.gx) + Math.abs(e.gy + DY[b] - target.gy);
+        return db - da; // farther from the player sorts first = flee
+      });
+    }
+    this.tryDirs(e, dirs);
+  }
+
   private faceToward(e: Entity, t: Entity): Dir {
     const dx = t.gx - e.gx;
     const dy = t.gy - e.gy;
@@ -664,7 +760,10 @@ export class Sim {
     for (let i = 0; i < this.tiles.length; i++) {
       if (this.tileLife[i]! > 0) {
         this.tileLife[i]! -= dt;
-        if (this.tileLife[i]! <= 0 && (this.tiles[i] === 3 || this.tiles[i] === 4 || this.tiles[i] === 5)) {
+        if (
+          this.tileLife[i]! <= 0 &&
+          (this.tiles[i] === 3 || this.tiles[i] === 4 || this.tiles[i] === 5)
+        ) {
           this.tiles[i] = 0;
         }
       }
@@ -690,6 +789,7 @@ export class Sim {
       e.flash = Math.max(0, e.flash - dt);
       e.squash = Math.max(0, e.squash - dt * 1.6);
       e.shotCd = Math.max(0, e.shotCd - dt);
+      e.wander = Math.max(0, e.wander - dt);
     }
 
     for (const e of this.entities) {
@@ -742,6 +842,10 @@ export class Sim {
         }
         continue;
       }
+      if (e.kind === "item") {
+        this.thinkItem(e);
+        continue;
+      }
       if (e.trapped > 1.15) {
         this.kill(e);
         continue;
@@ -760,20 +864,45 @@ export class Sim {
     this.particles = this.particles.filter((p) => p.life > 0);
     this.entities = this.entities.filter((e) => e.alive || e.flash > 0);
 
-    const enemies = this.entities.filter(
-      (e) => e.alive && e.kind !== "player" && e.kind !== "projectile",
-    );
-    if (enemies.length === 0 && this.status === "play") {
-      this.status = "win";
-      this.score += 250 + Math.max(0, 80 - Math.floor(this.time)) * 5;
-      this.hooks.onSfx("win");
+    if (!this.objective) {
+      const enemies = this.entities.filter(
+        (e) => e.alive && e.kind !== "player" && e.kind !== "projectile",
+      );
+      if (enemies.length === 0 && this.status === "play") this.winLevel();
     }
   }
 
   private resolveTouches() {
     const players = this.entities.filter((e) => e.kind === "player" && e.alive);
-    for (const e of this.entities) {
+    for (const e of [...this.entities]) {
       if (!e.alive) continue;
+      if (e.kind === "item") {
+        for (const p of players) {
+          if (Math.abs(p.x - e.x) >= 0.6 || Math.abs(p.y - e.y) >= 0.6) continue;
+          e.alive = false;
+          this.waveCollected++;
+          this.score += 30;
+          const info = ITEM_INFO[e.item!];
+          this.burst(e.gx, e.gy, info.color, 10, "confetti");
+          this.hooks.onSfx("pickup");
+          if (this.objective) {
+            if (this.waveCollected >= this.waveTarget) {
+              if (this.waveIndex + 1 < this.objective.waves.length) {
+                this.waveIndex++;
+                this.spawnWave();
+              } else {
+                this.winLevel();
+              }
+            } else {
+              const remaining = ITEM_INFO[this.objective.waves[this.waveIndex]!.item].name;
+              this.message = `Colete: ${remaining} (${this.waveCollected}/${this.waveTarget})`;
+              this.messageT = 1.2;
+            }
+          }
+          break;
+        }
+        continue;
+      }
       if (e.kind === "projectile") {
         if (this.tileAt(e.gx, e.gy) === 1 || this.tileAt(e.gx, e.gy) === 2) {
           if (this.tileAt(e.gx, e.gy) === 2) this.breakCrate(e.gx, e.gy);
@@ -810,12 +939,22 @@ export class Sim {
       return p.cooldown <= 0 ? 1 : 1 - p.cooldown / max;
     };
     return {
-      lives: this.lives,
+      p1Alive: p1?.alive ?? false,
+      p2Alive: this.players > 1 ? (p2?.alive ?? false) : null,
       score: this.score,
       enemies,
       levelName: this.level.name,
       world: this.level.world,
-      worldName: this.level.world === "fridge" ? "Geladeira" : this.level.world === "pantry" ? "Despensa" : this.level.world === "freezer" ? "Freezer" : this.level.world === "factory" ? "Fábrica de Doces" : "Arena do Rei",
+      worldName:
+        this.level.world === "fridge"
+          ? "Geladeira"
+          : this.level.world === "pantry"
+            ? "Despensa"
+            : this.level.world === "freezer"
+              ? "Freezer"
+              : this.level.world === "factory"
+                ? "Fábrica de Doces"
+                : "Arena do Rei",
       p1Cd: cd(p1),
       p2Cd: cd(p2),
       p1Fruit: p1?.fruit ?? "lemon",
@@ -824,12 +963,28 @@ export class Sim {
       status: this.status,
       players: this.players,
       paused: this.paused,
+      objective:
+        this.objective && this.objective.waves[this.waveIndex]
+          ? {
+              itemName: ITEM_INFO[this.objective.waves[this.waveIndex]!.item].name,
+              itemColor: ITEM_INFO[this.objective.waves[this.waveIndex]!.item].color,
+              collected: this.waveCollected,
+              target: this.waveTarget,
+              wavesLeft: this.objective.waves.length - this.waveIndex - 1,
+            }
+          : null,
     };
   }
 
   playerPos() {
     const p = this.entities.find((e) => e.kind === "player" && e.alive);
-    return { x: p?.x ?? 0, y: p?.y ?? 0, dir: p?.dir ?? 1, moving: !!p?.moving, speed: p?.moving ? p.speed : 0 };
+    return {
+      x: p?.x ?? 0,
+      y: p?.y ?? 0,
+      dir: p?.dir ?? 1,
+      moving: !!p?.moving,
+      speed: p?.moving ? p.speed : 0,
+    };
   }
 }
 
