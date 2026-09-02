@@ -67,16 +67,18 @@ export class Input {
       this.keys.delete(e.code);
     };
     const clear = () => this.keys.clear();
+    const onVisibility = () => {
+      if (document.hidden) this.keys.clear();
+    };
     window.addEventListener("keydown", down, { capture: true });
     window.addEventListener("keyup", up, { capture: true });
     window.addEventListener("blur", clear);
-    document.addEventListener("visibilitychange", () => {
-      if (document.hidden) this.keys.clear();
-    });
+    document.addEventListener("visibilitychange", onVisibility);
     return () => {
       window.removeEventListener("keydown", down, { capture: true });
       window.removeEventListener("keyup", up, { capture: true });
       window.removeEventListener("blur", clear);
+      document.removeEventListener("visibilitychange", onVisibility);
     };
   }
 

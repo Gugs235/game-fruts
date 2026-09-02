@@ -193,6 +193,7 @@ export function FruitRebellion() {
             setScreen("title");
           }}
           onRetry={() => {
+            setHud(null);
             setCarryScore(levelStartScore);
             setOver(null);
             setPaused(false);
@@ -205,6 +206,7 @@ export function FruitRebellion() {
               return;
             }
             setLevelIndex(next);
+            setHud(null);
             setLevelStartScore(carryScore);
             setOver(null);
             setPaused(false);
