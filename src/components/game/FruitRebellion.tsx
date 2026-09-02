@@ -520,6 +520,65 @@ function CharSelect({
   );
 }
 
+function PowerBadge({
+  fruit,
+  progress,
+  secondsLeft,
+  label,
+  keyHint,
+  accentClass,
+  alive = true,
+}: {
+  fruit: FruitId;
+  progress: number;
+  secondsLeft: number;
+  label?: string;
+  keyHint: string;
+  accentClass: string;
+  alive?: boolean;
+}) {
+  const def = FRUITS[fruit];
+  const pct = Math.round(Math.min(1, Math.max(0, progress)) * 100);
+  const ready = pct >= 100;
+  return (
+    <div
+      className={`flex min-w-0 flex-1 items-center gap-2 rounded-2xl border px-2.5 py-1.5 shadow-sm transition-opacity duration-200 ${
+        alive ? "border-border-strong bg-elevated" : "border-border bg-surface/50 opacity-50"
+      }`}
+    >
+      <span className="text-xl leading-none" aria-hidden>
+        {def.icon}
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-1.5">
+          {label && (
+            <span
+              className={`rounded-full px-1.5 py-px text-[9px] font-bold text-white ${accentClass}`}
+            >
+              {label}
+            </span>
+          )}
+          <span className="truncate text-xs font-semibold leading-tight">{def.powerName}</span>
+        </div>
+        <div className="mt-1 flex items-center gap-1.5">
+          <div className="h-1.5 min-w-8 flex-1 overflow-hidden rounded-full bg-bg/50">
+            <div
+              className={`h-full rounded-full transition-[width] duration-150 ease-linear ${accentClass}`}
+              style={{ width: `${pct}%` }}
+            />
+          </div>
+          <span className="whitespace-nowrap text-[10px] font-bold tabular-nums text-muted">
+            {ready ? "PRONTO" : `${secondsLeft.toFixed(1)}s`}
+          </span>
+        </div>
+      </div>
+      <span className="hidden shrink-0 rounded-md border border-border-strong bg-bg px-1.5 py-1 text-[9px] font-bold uppercase tracking-wide text-muted sm:inline-block">
+        {keyHint}
+      </span>
+    </div>
+  );
+}
+
 function PlayView({
   levelIndex,
   p1Fruit,
@@ -605,66 +664,95 @@ function PlayView({
 
   return (
     <div className="relative flex min-h-dvh flex-col">
-      <header className="z-10 flex items-center gap-3 border-b border-border bg-bg/80 px-3 py-2 backdrop-blur-sm">
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-xs font-semibold uppercase tracking-[0.16em] text-muted">
-            {WORLDS[level.world].name} · {level.id}
-          </p>
-          <p className="truncate font-display text-lg leading-tight">{level.name}</p>
-        </div>
+      <header className="z-10 flex flex-col gap-2 border-b border-border bg-bg/80 px-3 py-2 backdrop-blur-sm">
         <div className="flex items-center gap-2.5">
-          <div
-            className="flex items-center gap-1"
-            aria-label={p1Alive ? "Jogador 1 vivo" : "Jogador 1 eliminado"}
-          >
-            {players === 2 && <span className="text-[10px] font-bold text-muted">P1</span>}
-            <Heart
-              className={`size-5 ${p1Alive ? "fill-berry text-berry" : "text-subtle"}`}
-              strokeWidth={2}
-            />
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-xs font-semibold uppercase tracking-[0.16em] text-muted">
+              {WORLDS[level.world].name} · {level.id}
+            </p>
+            <p className="truncate font-display text-lg leading-tight">{level.name}</p>
           </div>
-          {players === 2 && (
+          <div className="flex items-center gap-1.5">
             <div
-              className="flex items-center gap-1"
-              aria-label={p2Alive ? "Jogador 2 vivo" : "Jogador 2 eliminado"}
+              className={`flex items-center gap-1 rounded-full border px-2 py-1 ${
+                p1Alive ? "border-berry/30 bg-berry/10" : "border-border bg-surface/60"
+              }`}
+              aria-label={p1Alive ? "Jogador 1 vivo" : "Jogador 1 eliminado"}
             >
-              <span className="text-[10px] font-bold text-muted">P2</span>
+              {players === 2 && <span className="text-[10px] font-bold text-muted">P1</span>}
               <Heart
-                className={`size-5 ${p2Alive ? "fill-accent text-accent" : "text-subtle"}`}
+                className={`size-4 ${p1Alive ? "fill-berry text-berry" : "text-subtle"}`}
                 strokeWidth={2}
               />
             </div>
+            {players === 2 && (
+              <div
+                className={`flex items-center gap-1 rounded-full border px-2 py-1 ${
+                  p2Alive ? "border-accent/30 bg-accent/10" : "border-border bg-surface/60"
+                }`}
+                aria-label={p2Alive ? "Jogador 2 vivo" : "Jogador 2 eliminado"}
+              >
+                <span className="text-[10px] font-bold text-muted">P2</span>
+                <Heart
+                  className={`size-4 ${p2Alive ? "fill-accent text-accent" : "text-subtle"}`}
+                  strokeWidth={2}
+                />
+              </div>
+            )}
+          </div>
+          <p className="w-14 shrink-0 text-right font-display text-lg tabular-nums">
+            {hud?.score ?? score}
+          </p>
+          {hud?.objective ? (
+            <p
+              className="hidden shrink-0 items-center gap-1.5 rounded-full bg-elevated px-2.5 py-1 text-sm font-semibold sm:flex"
+              style={{ color: hud.objective.itemColor }}
+            >
+              {hud.objective.itemName} {hud.objective.collected}/{hud.objective.target}
+              {hud.objective.wavesLeft > 0 ? ` (+${hud.objective.wavesLeft})` : ""}
+            </p>
+          ) : (
+            <p className="hidden shrink-0 text-sm text-muted sm:block">{hud?.enemies ?? 0} doces</p>
+          )}
+          <button
+            type="button"
+            className="grid size-11 shrink-0 place-items-center rounded-full border border-border-strong bg-elevated shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md active:translate-y-0 active:scale-90"
+            onClick={onMute}
+            aria-label={muted ? "Ativar som" : "Silenciar"}
+          >
+            {muted ? <VolumeX className="size-5" /> : <Volume2 className="size-5" />}
+          </button>
+          <button
+            type="button"
+            className="grid size-11 shrink-0 place-items-center rounded-full border border-border-strong bg-elevated shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md active:translate-y-0 active:scale-90"
+            onClick={() => onPause(true)}
+            aria-label="Pausar"
+          >
+            <Pause className="size-5" />
+          </button>
+        </div>
+        <div className="flex items-center gap-2">
+          <PowerBadge
+            fruit={p1Fruit}
+            progress={hud?.p1Cd ?? 1}
+            secondsLeft={hud?.p1CdSecs ?? 0}
+            label={players === 2 ? "P1" : undefined}
+            keyHint="Espaço"
+            accentClass="bg-berry"
+            alive={p1Alive}
+          />
+          {players === 2 && p2Fruit && (
+            <PowerBadge
+              fruit={p2Fruit}
+              progress={hud?.p2Cd ?? 1}
+              secondsLeft={hud?.p2CdSecs ?? 0}
+              label="P2"
+              keyHint="Enter"
+              accentClass="bg-accent"
+              alive={p2Alive ?? true}
+            />
           )}
         </div>
-        <p className="w-16 text-right font-display text-lg tabular-nums">{hud?.score ?? score}</p>
-        {hud?.objective ? (
-          <p
-            className="hidden items-center gap-1.5 text-sm font-semibold sm:flex"
-            style={{ color: hud.objective.itemColor }}
-          >
-            {hud.objective.itemName} {hud.objective.collected}/{hud.objective.target}
-            {hud.objective.wavesLeft > 0 ? ` (+${hud.objective.wavesLeft})` : ""}
-          </p>
-        ) : (
-          <p className="hidden text-sm text-muted sm:block">{hud?.enemies ?? 0} doces</p>
-        )}
-        <p className="hidden text-xs text-subtle lg:block">WASD · Espaço · E</p>
-        <button
-          type="button"
-          className="grid size-11 place-items-center rounded-md border border-border bg-elevated"
-          onClick={onMute}
-          aria-label={muted ? "Ativar som" : "Silenciar"}
-        >
-          {muted ? <VolumeX className="size-4" /> : <Volume2 className="size-4" />}
-        </button>
-        <button
-          type="button"
-          className="grid size-11 place-items-center rounded-md border border-border bg-elevated"
-          onClick={() => onPause(true)}
-          aria-label="Pausar"
-        >
-          <Pause className="size-4" />
-        </button>
       </header>
 
       <div className="relative flex min-h-0 flex-1 flex-col">

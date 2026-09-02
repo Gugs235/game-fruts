@@ -45,6 +45,8 @@ export const FRUITS: Record<
     name: string;
     role: string;
     power: string;
+    powerName: string;
+    icon: string;
     hint: string;
     cooldown: number;
     accent: string;
@@ -55,6 +57,8 @@ export const FRUITS: Record<
     name: "Limão",
     role: "Ácido",
     power: "Espirra suco ácido à frente, atordoando e derretendo doces próximos.",
+    powerName: "Suco Ácido",
+    icon: "🍋",
     hint: "Melhor contra grupos.",
     cooldown: 2.2,
     accent: "#c8b43a",
@@ -64,6 +68,8 @@ export const FRUITS: Record<
     name: "Melancia",
     role: "Rolamento",
     power: "Rola em linha reta, esmagando caixas e inimigos no caminho.",
+    powerName: "Rolamento",
+    icon: "🍉",
     hint: "Mobilidade e dano em área.",
     cooldown: 4.4,
     accent: "#d6455d",
@@ -73,6 +79,8 @@ export const FRUITS: Record<
     name: "Uva",
     role: "Salto",
     power: "Pula duas casas e deixa um rastro escorregadio.",
+    powerName: "Salto Duplo",
+    icon: "🍇",
     hint: "Derruba perseguições.",
     cooldown: 2.8,
     accent: "#7b4bb7",
@@ -82,6 +90,8 @@ export const FRUITS: Record<
     name: "Abacaxi",
     role: "Espinhos",
     power: "Cria uma parede de espinhos temporária para prender inimigos.",
+    powerName: "Muro de Espinhos",
+    icon: "🍍",
     hint: "Controle de caminho.",
     cooldown: 3.4,
     accent: "#d4a017",
@@ -91,6 +101,8 @@ export const FRUITS: Record<
     name: "Morango",
     role: "Ímpeto",
     power: "Dash rápido: atravessa inimigos e escapa de apertos.",
+    powerName: "Dash Veloz",
+    icon: "🍓",
     hint: "Fuga e atravessar corredores.",
     cooldown: 2.4,
     accent: "#c43c3c",

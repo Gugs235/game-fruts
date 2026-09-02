@@ -100,6 +100,8 @@ export type HudSnap = {
   worldName: string;
   p1Cd: number;
   p2Cd: number;
+  p1CdSecs: number;
+  p2CdSecs: number;
   p1Fruit: FruitId;
   p2Fruit: FruitId | null;
   message: string | null;
@@ -992,6 +994,8 @@ export class Sim {
                 : "Arena do Rei",
       p1Cd: cd(p1),
       p2Cd: cd(p2),
+      p1CdSecs: Math.max(0, p1?.cooldown ?? 0),
+      p2CdSecs: Math.max(0, p2?.cooldown ?? 0),
       p1Fruit: p1?.fruit ?? "lemon",
       p2Fruit: p2?.fruit ?? null,
       message: this.message,
