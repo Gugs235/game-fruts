@@ -17,11 +17,15 @@ export class FruitEngine {
   private last = 0;
   private running = false;
   private dead = false;
+  private frozenTime = 0;
   private unbind: (() => void) | null = null;
   onHud: (h: HudSnap) => void;
   onOver: (status: "win" | "lose", score: number) => void;
   private lastStatus: "play" | "win" | "lose" = "play";
   private hudAcc = 0;
+  private overAt: number | null = null;
+  private overFired = false;
+  private overStatus: "win" | "lose" | null = null;
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -59,7 +63,11 @@ export class FruitEngine {
     this.running = true;
     this.acc = 0;
     this.last = performance.now();
+    this.frozenTime = this.last / 1000;
     this.lastStatus = "play";
+    this.overAt = null;
+    this.overFired = false;
+    this.overStatus = null;
     this.wireProbe();
     this.canvas.tabIndex = 0;
     this.canvas.focus({ preventScroll: true });
@@ -109,10 +117,15 @@ export class FruitEngine {
       }
       this.fit();
       const rect = this.canvas.getBoundingClientRect();
+      const running = !this.sim.paused && this.sim.status === "play";
+      if (running) this.frozenTime = now / 1000;
       if (rect.width > 0 && rect.height > 0) {
-        renderSim(this.ctx, this.sim, this.sprites, rect.width, rect.height, now / 1000);
+        renderSim(this.ctx, this.sim, this.sprites, rect.width, rect.height, this.frozenTime);
       }
-      this.audio.tickMusic(dt, this.sim.level.world === "arena" || this.sim.level.world === "factory");
+      this.audio.tickMusic(
+        dt,
+        this.sim.level.world === "arena" || this.sim.level.world === "factory",
+      );
       this.hudAcc += dt;
       if (this.hudAcc > 0.12) {
         this.hudAcc = 0;
@@ -120,8 +133,13 @@ export class FruitEngine {
       }
       if (this.sim.status !== "play" && this.lastStatus === "play") {
         this.lastStatus = this.sim.status;
+        this.overStatus = this.sim.status;
         this.onHud(this.sim.hud());
-        this.onOver(this.sim.status, this.sim.score);
+        this.overAt = now;
+      }
+      if (this.overAt !== null && !this.overFired && now - this.overAt >= 2000) {
+        this.overFired = true;
+        this.onOver(this.overStatus!, this.sim.score);
       }
     } catch (err) {
       console.error("[fruit-rebellion]", err);

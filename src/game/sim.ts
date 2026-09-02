@@ -18,6 +18,28 @@ import {
 } from "./data";
 import type { Input } from "./input";
 
+/** Deterministic PRNG (mulberry32), seeded per level id — so reloading the
+ * same level (a retry, or just re-entering it) always lays out items in the
+ * exact same spots instead of a fresh random arrangement each time. */
+function hashSeed(s: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+function mulberry32(seed: number) {
+  let a = seed;
+  return function () {
+    a |= 0;
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
 export type Particle = {
   x: number;
   y: number;
@@ -154,6 +176,7 @@ export class Sim {
   pickups = 0;
   collected = new Set<string>();
   objective: LevelObjective | null = null;
+  private rng: () => number = Math.random;
   waveIndex = 0;
   waveTarget = 0;
   waveCollected = 0;
@@ -175,6 +198,7 @@ export class Sim {
     this.hitstop = 0;
     this.trauma = 0;
     this.paused = false;
+    this.rng = mulberry32(hashSeed(level.id));
     this.entities = [];
     this.particles = [];
     this.collected = new Set();
@@ -269,7 +293,7 @@ export class Sim {
       }
     }
     if (!candidates.length) return null;
-    return candidates[Math.floor(Math.random() * candidates.length)]!;
+    return candidates[Math.floor(this.rng() * candidates.length)]!;
   }
 
   /** Spawns the current wave's items. Advances waveIndex before calling this. */
@@ -292,7 +316,7 @@ export class Sim {
           gx: cell.x,
           gy: cell.y,
           speed: wave.moving ? 2.0 : 0,
-          dir: Math.floor(Math.random() * 4) as Dir,
+          dir: Math.floor(this.rng() * 4) as Dir,
         }),
       );
     }
@@ -838,7 +862,18 @@ export class Sim {
       if (!e.alive || e.kind === "player") continue;
       if (e.kind === "projectile") {
         if (!e.moving) {
-          if (!this.startMove(e, e.dir)) e.alive = false;
+          const nx = e.gx + DX[e.dir];
+          const ny = e.gy + DY[e.dir];
+          const hitPlayer = this.entities.find(
+            (x) => x.kind === "player" && x.alive && x.gx === nx && x.gy === ny && x.invuln <= 0,
+          );
+          if (hitPlayer) {
+            this.damage(hitPlayer, 1);
+            e.alive = false;
+            this.burst(nx, ny, "#d6ff4a", 6, "spark");
+          } else if (!this.startMove(e, e.dir)) {
+            e.alive = false;
+          }
         }
         continue;
       }
@@ -922,7 +957,7 @@ export class Sim {
       if (e.kind === "player") continue;
       for (const p of players) {
         if (p.invuln > 0 || p.rollLeft > 0 || p.dashing > 0) continue;
-        if (Math.abs(p.x - e.x) < 0.62 && Math.abs(p.y - e.y) < 0.62) this.damage(p, 1);
+        if (Math.abs(p.gx - e.gx) + Math.abs(p.gy - e.gy) <= 1) this.damage(p, 1);
       }
     }
   }

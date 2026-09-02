@@ -46,6 +46,8 @@ export function FruitRebellion() {
   const [paused, setPaused] = useState(false);
   const [over, setOver] = useState<"win" | "lose" | null>(null);
   const [carryScore, setCarryScore] = useState(0);
+  const [levelStartScore, setLevelStartScore] = useState(0);
+  const [attempt, setAttempt] = useState(0);
   const audioRef = useRef<GameAudio | null>(null);
   if (!audioRef.current) audioRef.current = new GameAudio();
   const audio = audioRef.current;
@@ -92,6 +94,8 @@ export function FruitRebellion() {
     setHud(null);
     setOver(null);
     setPaused(false);
+    setLevelStartScore(carryScore);
+    setAttempt(0);
     setScreen("play");
   };
 
@@ -160,7 +164,7 @@ export function FruitRebellion() {
       )}
       {screen === "play" && (
         <PlayView
-          key={`${levelIndex}-${p1}-${p2}-${players}`}
+          key={`${levelIndex}-${p1}-${p2}-${players}-${attempt}`}
           levelIndex={levelIndex}
           p1Fruit={p1}
           p2Fruit={p2}
@@ -189,8 +193,10 @@ export function FruitRebellion() {
             setScreen("title");
           }}
           onRetry={() => {
-            setCarryScore(0);
-            goChars(levelIndex);
+            setCarryScore(levelStartScore);
+            setOver(null);
+            setPaused(false);
+            setAttempt((a) => a + 1);
           }}
           onNext={() => {
             const next = levelIndex + 1;
@@ -198,7 +204,11 @@ export function FruitRebellion() {
               setScreen("complete");
               return;
             }
-            goChars(next);
+            setLevelIndex(next);
+            setLevelStartScore(carryScore);
+            setOver(null);
+            setPaused(false);
+            setAttempt(0);
           }}
         />
       )}
@@ -555,6 +565,9 @@ function PlayView({
   onOverRef.current = onOver;
   onHudRef.current = onHud;
 
+  // Captured once, at mount — NOT re-read from the live `score` prop below.
+  const initialScoreRef = useRef(score);
+
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -566,7 +579,13 @@ function PlayView({
       onOver: (s, sc) => onOverRef.current(s, sc),
     });
     engineRef.current = engine;
-    void engine.start(levelIndex, fruits, players, score).then(() => {
+    // Only the score at the moment this attempt began matters here — this
+    // effect must NOT depend on the live `score` prop, since that prop is
+    // updated at the exact instant a level ends (win/lose), which would
+    // re-run this effect and silently recreate the whole engine (resetting
+    // status back to "play" and respawning everything) right as the
+    // end-of-level modal is about to appear.
+    void engine.start(levelIndex, fruits, players, initialScoreRef.current).then(() => {
       if (cancelled) engine.destroy();
     });
     return () => {
@@ -574,7 +593,7 @@ function PlayView({
       engine.destroy();
       engineRef.current = null;
     };
-  }, [audio, levelIndex, p1Fruit, p2Fruit, players, score]);
+  }, [audio, levelIndex, p1Fruit, p2Fruit, players]);
 
   useEffect(() => {
     engineRef.current?.setPaused(paused || !!over);
@@ -692,7 +711,7 @@ function PlayView({
             </h2>
             <p className="mt-2 text-sm text-muted">
               {over === "win"
-                ? "Os doces foram derretidos. Escolha a próxima fruta."
+                ? "Os doces foram derretidos."
                 : over === "lose"
                   ? "O açúcar venceu desta vez."
                   : "O labirinto espera."}
@@ -700,9 +719,14 @@ function PlayView({
             <p className="mt-3 font-display text-2xl tabular-nums">{hud?.score ?? score}</p>
             <div className="mt-5 flex flex-col gap-2">
               {over === "win" && (
-                <Btn onClick={onNext}>
-                  {levelIndex + 1 >= LEVELS.length ? "Final" : "Próxima fase"}
-                </Btn>
+                <>
+                  <Btn onClick={onNext}>
+                    {levelIndex + 1 >= LEVELS.length ? "Final" : "Próxima fase"}
+                  </Btn>
+                  <Btn variant="ghost" onClick={onRetry}>
+                    <RotateCcw className="size-4" /> Jogar de novo
+                  </Btn>
+                </>
               )}
               {over === "lose" && (
                 <Btn onClick={onRetry}>
@@ -721,7 +745,7 @@ function PlayView({
                 </Btn>
               )}
               <Btn variant="ghost" onClick={onMenu}>
-                Menu
+                Sair
               </Btn>
             </div>
           </Panel>
