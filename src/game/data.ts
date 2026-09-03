@@ -38,6 +38,13 @@ export const ITEM_INFO: Record<ItemKind, { name: string; color: string; accent: 
 export type LevelWave = { item: ItemKind; count: number; moving?: boolean };
 export type LevelObjective = { waves: LevelWave[] };
 
+// Respawn config per enemy kind, set per level. Undefined/omitted = no
+// respawn (today's behavior, unchanged for every existing level).
+export type EnemyRespawn =
+  | { type: "none" }
+  | { type: "objective" } // comes back when the NEXT wave/moment begins
+  | { type: "time"; seconds: number }; // comes back on its own after N seconds
+
 export const FRUITS: Record<
   FruitId,
   {
@@ -207,6 +214,9 @@ export type LevelDef = {
   // Se presente: vitória ao completar todas as ondas de coleta; inimigos
   // continuam vivos como obstáculo, não precisam ser eliminados.
   objective?: LevelObjective;
+  // Configuração opcional de respawn por tipo de doce. Tipos omitidos
+  // nunca respawnam (comportamento atual, sem mudança).
+  respawns?: Partial<Record<EnemyKind, EnemyRespawn>>;
 };
 
 export const LEVELS: LevelDef[] = [
@@ -400,6 +410,7 @@ export const LEVELS: LevelDef[] = [
         { item: "blueberry", count: 4, moving: true },
       ],
     },
+    respawns: { lollipop: { type: "objective" } },
   },
   {
     id: "9",
@@ -502,6 +513,7 @@ export const LEVELS: LevelDef[] = [
         { item: "kiwi", count: 3, moving: true },
       ],
     },
+    respawns: { gummy: { type: "time", seconds: 6 } },
   },
   {
     id: "13",

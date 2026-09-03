@@ -9,6 +9,7 @@ import {
   LEVELS,
   type Dir,
   type EnemyKind,
+  type EnemyRespawn,
   type FruitId,
   type ItemKind,
   type LevelDef,
@@ -59,6 +60,7 @@ export type Entity = {
   fruit?: FruitId;
   item?: ItemKind;
   wander: number;
+  spawnGrace: number;
   gx: number;
   gy: number;
   x: number;
@@ -114,6 +116,8 @@ export type HudSnap = {
     collected: number;
     target: number;
     wavesLeft: number;
+    step: number;
+    totalSteps: number;
   } | null;
 };
 
@@ -155,6 +159,7 @@ function makeEntity(partial: Partial<Entity> & Pick<Entity, "kind" | "gx" | "gy"
     spawnedMinions: false,
     mimic: [],
     wander: 0,
+    spawnGrace: 0,
     ...partial,
   };
 }
@@ -178,6 +183,7 @@ export class Sim {
   pickups = 0;
   collected = new Set<string>();
   objective: LevelObjective | null = null;
+  private pendingRespawns: { entity: Entity; type: "objective" | "time"; timer: number }[] = [];
   private rng: () => number = Math.random;
   waveIndex = 0;
   waveTarget = 0;
@@ -205,6 +211,7 @@ export class Sim {
     this.particles = [];
     this.collected = new Set();
     this.objective = level.objective ?? null;
+    this.pendingRespawns = [];
     this.waveIndex = 0;
     this.waveTarget = 0;
     this.waveCollected = 0;
@@ -306,8 +313,12 @@ export class Sim {
     this.waveTarget = wave.count;
     this.waveCollected = 0;
     const info = ITEM_INFO[wave.item];
-    this.message = `Colete: ${info.name} (0/${wave.count})`;
-    this.messageT = 2.6;
+    const isTransition = this.waveIndex > 0;
+    const tag = `Objetivo ${this.waveIndex + 1}/${this.objective.waves.length}`;
+    this.message = isTransition
+      ? `✓ Concluído! ${tag}: ${info.name} (0/${wave.count})`
+      : `${tag}: ${info.name} (0/${wave.count})`;
+    this.messageT = isTransition ? 2.8 : 2.6;
     for (let i = 0; i < wave.count; i++) {
       const cell = this.randomFreeCell();
       if (!cell) break;
@@ -322,6 +333,7 @@ export class Sim {
         }),
       );
     }
+    if (isTransition) this.resolveObjectiveRespawns();
   }
 
   private winLevel() {
@@ -516,6 +528,59 @@ export class Sim {
     this.hooks.onSfx("kill");
     this.trauma = Math.min(1, this.trauma + 0.4);
     this.hitstop = 0.08;
+
+    const cfg: EnemyRespawn | undefined = this.level.respawns?.[e.kind as EnemyKind];
+    if (cfg && cfg.type !== "none") {
+      this.pendingRespawns.push({
+        entity: e,
+        type: cfg.type,
+        timer: cfg.type === "time" ? cfg.seconds : 0,
+      });
+    }
+  }
+
+  /** Revives a dead entity IN PLACE — same object, same id, back to life at
+   * the exact spot it died. Never creates a second copy alongside it. */
+  private revive(e: Entity) {
+    const info = ENEMY_INFO[e.kind as EnemyKind];
+    e.alive = true;
+    e.hp = info.hp;
+    e.maxHp = info.hp;
+    e.speed = info.speed;
+    e.moving = false;
+    e.x = e.gx;
+    e.y = e.gy;
+    e.fromX = e.gx;
+    e.fromY = e.gy;
+    e.toX = e.gx;
+    e.toY = e.gy;
+    e.t = 0;
+    e.dir = 3;
+    e.stun = 0;
+    e.trapped = 0;
+    e.flash = 0;
+    e.squash = 0;
+    e.shotCd = 0;
+    e.wander = 0;
+    e.spawnGrace = 0.5;
+    this.burst(e.gx, e.gy, "#f4efe6", 10, "confetti");
+  }
+
+  /** Spawns every enemy waiting on a "respawn when the next objective
+   * begins" rule, at the exact spot each one died. Called right after a
+   * new wave starts. Does not touch "time"-based entries — those tick on
+   * their own regardless of objective progress. */
+  private resolveObjectiveRespawns() {
+    if (!this.pendingRespawns.length) return;
+    const remaining: typeof this.pendingRespawns = [];
+    for (const r of this.pendingRespawns) {
+      if (r.type === "objective") {
+        this.revive(r.entity);
+      } else {
+        remaining.push(r);
+      }
+    }
+    this.pendingRespawns = remaining;
   }
 
   private usePower(p: Entity) {
@@ -800,22 +865,42 @@ export class Sim {
 
     const acts = [p1, p2];
     for (const p of this.entities) {
-      if (p.kind !== "player" || !p.alive) continue;
+      if (p.kind !== "player") continue;
+      p.flash = Math.max(0, p.flash - dt);
+      p.squash = Math.max(0, p.squash - dt * 1.8);
+      if (!p.alive) continue;
       p.cooldown = Math.max(0, p.cooldown - dt);
       p.crateCd = Math.max(0, p.crateCd - dt);
       p.stun = Math.max(0, p.stun - dt);
       p.invuln = Math.max(0, p.invuln - dt);
-      p.flash = Math.max(0, p.flash - dt);
-      p.squash = Math.max(0, p.squash - dt * 1.8);
     }
 
     for (const e of this.entities) {
-      if (!e.alive || e.kind === "player") continue;
-      e.stun = Math.max(0, e.stun - dt);
+      if (e.kind === "player") continue;
       e.flash = Math.max(0, e.flash - dt);
       e.squash = Math.max(0, e.squash - dt * 1.6);
+      if (!e.alive) continue;
+      e.stun = Math.max(0, e.stun - dt);
       e.shotCd = Math.max(0, e.shotCd - dt);
       e.wander = Math.max(0, e.wander - dt);
+      e.spawnGrace = Math.max(0, e.spawnGrace - dt);
+    }
+
+    if (this.pendingRespawns.length) {
+      const stillWaiting: typeof this.pendingRespawns = [];
+      for (const r of this.pendingRespawns) {
+        if (r.type !== "time") {
+          stillWaiting.push(r);
+          continue;
+        }
+        r.timer -= dt;
+        if (r.timer <= 0) {
+          this.revive(r.entity);
+        } else {
+          stillWaiting.push(r);
+        }
+      }
+      this.pendingRespawns = stillWaiting;
     }
 
     for (const e of this.entities) {
@@ -899,7 +984,7 @@ export class Sim {
       p.vy += 6 * dt;
     }
     this.particles = this.particles.filter((p) => p.life > 0);
-    this.entities = this.entities.filter((e) => e.alive || e.flash > 0);
+    this.entities = this.entities.filter((e) => e.alive || e.flash > 0 || e.kind in ENEMY_INFO);
 
     if (!this.objective) {
       const enemies = this.entities.filter(
@@ -932,7 +1017,8 @@ export class Sim {
               }
             } else {
               const remaining = ITEM_INFO[this.objective.waves[this.waveIndex]!.item].name;
-              this.message = `Colete: ${remaining} (${this.waveCollected}/${this.waveTarget})`;
+              const tag = `Objetivo ${this.waveIndex + 1}/${this.objective.waves.length}`;
+              this.message = `${tag}: ${remaining} (${this.waveCollected}/${this.waveTarget})`;
               this.messageT = 1.2;
             }
           }
@@ -957,6 +1043,7 @@ export class Sim {
         continue;
       }
       if (e.kind === "player") continue;
+      if (e.spawnGrace > 0) continue;
       for (const p of players) {
         if (p.invuln > 0 || p.rollLeft > 0 || p.dashing > 0) continue;
         if (Math.abs(p.gx - e.gx) + Math.abs(p.gy - e.gy) <= 1) this.damage(p, 1);
@@ -1009,6 +1096,8 @@ export class Sim {
               itemColor: ITEM_INFO[this.objective.waves[this.waveIndex]!.item].color,
               collected: this.waveCollected,
               target: this.waveTarget,
+              step: this.waveIndex + 1,
+              totalSteps: this.objective.waves.length,
               wavesLeft: this.objective.waves.length - this.waveIndex - 1,
             }
           : null,

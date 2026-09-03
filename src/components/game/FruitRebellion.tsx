@@ -706,13 +706,19 @@ function PlayView({
             {hud?.score ?? score}
           </p>
           {hud?.objective ? (
-            <p
-              className="hidden shrink-0 items-center gap-1.5 rounded-full bg-elevated px-2.5 py-1 text-sm font-semibold sm:flex"
+            <div
+              className="hidden shrink-0 flex-col items-end leading-tight sm:flex"
               style={{ color: hud.objective.itemColor }}
             >
-              {hud.objective.itemName} {hud.objective.collected}/{hud.objective.target}
-              {hud.objective.wavesLeft > 0 ? ` (+${hud.objective.wavesLeft})` : ""}
-            </p>
+              {hud.objective.totalSteps > 1 && (
+                <span className="text-[9px] font-bold uppercase tracking-wide text-muted">
+                  Objetivo {hud.objective.step}/{hud.objective.totalSteps}
+                </span>
+              )}
+              <p className="flex items-center gap-1.5 rounded-full bg-elevated px-2.5 py-1 text-sm font-semibold">
+                {hud.objective.itemName} {hud.objective.collected}/{hud.objective.target}
+              </p>
+            </div>
           ) : (
             <p className="hidden shrink-0 text-sm text-muted sm:block">{hud?.enemies ?? 0} doces</p>
           )}

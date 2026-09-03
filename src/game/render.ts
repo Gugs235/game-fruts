@@ -1,4 +1,13 @@
-import { COLS, ROWS, ITEM_INFO, WORLDS, type FruitId, type ItemKind, type WorldId } from "./data";
+import {
+  COLS,
+  ROWS,
+  ENEMY_INFO,
+  ITEM_INFO,
+  WORLDS,
+  type FruitId,
+  type ItemKind,
+  type WorldId,
+} from "./data";
 import type { Entity, Particle, Sim } from "./sim";
 
 export type SpriteMap = Record<string, HTMLImageElement>;
@@ -361,7 +370,9 @@ export function renderSim(
     }
   }
 
-  const drawables = sim.entities.filter((e) => e.alive || e.flash > 0).slice();
+  const drawables = sim.entities
+    .filter((e) => e.alive || e.flash > 0 || e.kind in ENEMY_INFO)
+    .slice();
   drawables.sort((a, b) => a.y - b.y || a.x - b.x);
 
   for (const e of drawables) {
